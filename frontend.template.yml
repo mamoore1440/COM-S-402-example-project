@@ -1,0 +1,82 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: A static website
+
+Resources:
+  # An S3 bucket where we can put our HTML, JavaScript, CSS files
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      WebsiteConfiguration:
+        IndexDocument: "index.html"
+        ErrorDocument: "index.html"
+
+  # A policy for our S3 bucket so that it can be accessed by our CloudFront distribution
+  S3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3Bucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: PublicReadForGetBucketObjects
+            Action: [ 's3:GetObject', 's3:ListBucket' ]
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Resource: 
+              - !Sub 'arn:aws:s3:::${S3Bucket}'
+              - !Sub 'arn:aws:s3:::${S3Bucket}/*'
+
+  # A necessary resource for a CloudFront distribution
+  CloudFrontOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${AWS::StackName}-origin-access-control'
+        Description: !Sub 'Origin access control for ${S3Bucket.DomainName}'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # A CloudFront Distribution
+  # Acts as a Content-Delivery Network so that there is a Domain in front of our S3 bucket
+  # Also, allows for the website to be cached when it is globally accessed
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        DefaultCacheBehavior:
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachePolicyId: !Ref CachePolicyId
+          TargetOriginId: !Sub 's3-origin-${S3Bucket}'
+          Compress: true
+        Enabled: true
+        DefaultRootObject: index.html
+        CustomErrorResponses:
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: "/index.html"
+        Origins:
+        - DomainName: !GetAtt S3Bucket.DomainName
+          Id: !Sub 's3-origin-${S3Bucket}'
+          OriginAccessControlId: !GetAtt CloudFrontOriginAccessControl.Id
+          S3OriginConfig: # Necessary for cloudfront to work with s3 even though OAI is not being used
+            OriginAccessIdentity: ''
+        ViewerCertificate:
+          AcmCertificateArn: !Ref ACMCertificate
+          MinimumProtocolVersion: TLSv1
+          SslSupportMethod: sni-only
+
+Outputs:
+  S3BucketName:
+    Value: !Ref S3Bucket
+    Description: The name of the stacks S3 bucket where the static site is hosted.
+
