@@ -1,0 +1,67 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Resources for the API
+
+Parameters:
+  APIPort:
+    Type: Number
+    Default: 3000
+    Description: The port the API will run on.
+
+
+Resources:
+  # A SSH key for remote access to the virtual machine
+  # The key will be generated and stored within the AWS account for us to later retrieve as needed.
+  SSHKey:
+    Type: AWS::EC2::KeyPair
+    Properties: 
+      KeyName: virtual-machine-ssh-key
+
+
+  # The Virtual Machine (called an EC2 Instance) that we can use to run our API
+  # Note that without specifying the KeyName and referencing our SSH SecurityGroup, the VM would be inaccessible
+  VirtualMachine:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: !Ref SSHKey
+      ImageId: ami-0070c5311b7677678 # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/AMIs.html
+      InstanceType: t3.small # https://aws.amazon.com/ec2/instance-types/
+      SecurityGroups:
+        - !Ref SSHSecurityGroup
+        - !Ref APITrafficSecurityGroup 
+
+
+  # A security group that will allow incoming SSH traffic to the Virtual Machine
+  SSHSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH access via port 22
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          FromPort: 22
+          IpProtocol: tcp
+          ToPort: 22
+
+  # A security group that will allow incoming traffic to the API running on the Virtual Machine
+  APITrafficSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable incoming traffic to the API
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          FromPort: !Ref APIPort
+          IpProtocol: tcp
+          ToPort: !Ref APIPort
+
+  StaticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId: !Ref VirtualMachine 
+
+Outputs:
+  IPAddress:
+    Value: !Ref StaticIP 
+    Description: The Elastic (static) IP address of our Virtual Machine.
+
+  SSHKeyPairName:
+    Description: The ID of the SSH Key Pair associated with our Virtual Machine.
+    Value: !Sub '/ec2/keypair/${SSHKey.KeyPairId}'
