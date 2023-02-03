@@ -1,0 +1,7 @@
+version=0.1
+
+[default.deploy.parameters]
+confirm_changeset = false
+fail_on_empty_changeset = false
+region = 'us-east-1'
+
