@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: A static website
+Description: Resources for the frontend (a static website)
 
 Resources:
   # An S3 bucket where we can put our HTML, JavaScript, CSS files
