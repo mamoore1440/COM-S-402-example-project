@@ -1,5 +1,5 @@
 # API (backend)
-This is a sample API with Python, Flask, and Dockerk
+This is a sample API with Python, Flask, and Docker
 
 ## Running the API
 It is recommended you run the API with Docker. However, you can additionally run the API with Python virutalenv.

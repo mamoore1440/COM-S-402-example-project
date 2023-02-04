@@ -12,18 +12,20 @@ permissions:
 
 env:
   REGION: us-east-1
+  BACKEND_STACK_NAME: "backend"
+  FRONTEND_STACK_NAME: "frontend"
 
 jobs:
   deploy-backend:
     runs-on: ubuntu-latest
     outputs:
-      IP_ADDRESS: ${{ steps.deploy-stack.VM_IP }}
+      IP_ADDRESS: ${{ steps.deploy-stack.outputs.IP_ADDRESS }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@master
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v1-node16
         with:
           role-to-assume: ${{ secrets.IAM_ROLE_ARN }}
           aws-region: ${{ env.REGION }}
@@ -31,21 +33,23 @@ jobs:
       - name: Deploy Backend
         id: deploy-stack
         run: |
-          sam deploy --region $REGION --stack-name "backend" -t backend.template.yml
+          sam deploy --region $REGION --stack-name $BACKEND_STACK_NAME -t backend.template.yml
 
-          EC2_IP_ADDRESS=$(aws cloudformation describe-stacks --region $REGION --query 'Stacks[0].Outputs[?OutputKey==`IPAddress`].OutputValue' --output text)
-          KEY_PAIR_NAME=$(aws cloudformation describe-stacks --region $REGION --query 'Stacks[0].Outputs[?OutputKey==`SSHKeyPairName`].OutputValue' --output text)
+          EC2_IP_ADDRESS=$(aws cloudformation describe-stacks --region $REGION --stack-name $BACKEND_STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`IPAddress`].OutputValue' --output text)
 
-          echo "VM_IP=$EC2_IP_ADDRESS" >> $GITHUB_OUTPUT
-          echo "KEY_PAIR_NAME=$KEY_PAIR_NAME" >> $GITHUB_OUTPUT
+          echo "EC2_IP_ADDRESS=$EC2_IP_ADDRESS" >> $GITHUB_ENV
+          echo "IP_ADDRESS=$EC2_IP_ADDRESS" >> $GITHUB_OUTPUT
 
       - name: Start API 
         run: |
           # Grab the SSH key from AWS
-          aws ssm get-parameter --name $SSH_KEY_PAIR --region $REGION --with-decryption --query 'Parameter.Value' --output text > key.pem
+          KEY_PAIR_NAME=$(aws cloudformation describe-stacks --region $REGION --stack-name $BACKEND_STACK_NAME --query 'Stacks[0].Outputs[?OutputKey==`SSHKeyPairName`].OutputValue' --output text)
+          aws ssm get-parameter --name $KEY_PAIR_NAME --region $REGION --with-decryption --query 'Parameter.Value' --output text > key.pem
           chmod 600 key.pem
+
           EC2_INSTANCE_ID=$(aws ec2 describe-instances --region $REGION --filters "Name=ip-address,Values=$EC2_IP_ADDRESS" --query "Reservations[*].Instances[*].[InstanceId]" --output text)
           EC2_INSTANCE_STATUS=$(aws ec2 describe-instance-status --region $REGION --instance-id $EC2_INSTANCE_ID --query "InstanceStatuses[?InstanceId=='$EC2_INSTANCE_ID'].InstanceState.Name")
+
           until [ "$EC2_INSTANCE_STATUS" == "running" ]; do
             echo "Starting EC2 Instance..."
             aws ec2 start-instances --instance-ids $EC2_INSTANCE_ID
@@ -66,8 +70,7 @@ jobs:
           fi
 
           # Stop & Clear old docker containers (Note this will cause some downtime)
-          docker stop $(docker ps -a -q)
-          docker rm $(docker ps -a -q)
+          docker kill \$(docker container ps -a -q)
 
           # Build the latest version of the docker image and launch it
           cd backend
@@ -83,14 +86,14 @@ jobs:
         uses: actions/checkout@master
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v1-node16
         with:
           role-to-assume: ${{ secrets.IAM_ROLE_ARN }}
           aws-region: ${{ env.REGION }}
 
       - name: Deploy frontend
         run: |
-          sam deploy --region $REGION --stack-name "frontend" -t frontend.template.yml
+          sam deploy --region $REGION --stack-name $FRONTEND_STACK_NAME -t frontend.template.yml
 
       - name: Setup node
         uses: actions/setup-node@v3
@@ -99,18 +102,20 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --prefer-offline --no-audit
+        working-directory: ./frontend
 
       - name: Build and push static frontend
         run: |
+          cd frontend
           npm run build
 
-          BUCKET=$(aws cloudformation describe-stacks --stack-name="frontend" --region $REGION --query 'Stacks[0].Outputs[?OutputKey==`S3BucketName`].OutputValue' --output text)
+          BUCKET=$(aws cloudformation describe-stacks --stack-name="$FRONTEND_STACK_NAME" --region $REGION --query 'Stacks[0].Outputs[?OutputKey==`S3BucketName`].OutputValue' --output text)
 
           aws s3 sync build s3://$BUCKET
 
       - name: Generate Github Actions summary
         run: |
-          FRONTEND_URL=$(aws cloudformation describe-stacks --stack-name=$STACK_NAME --region $REGION --query 'Stacks[0].Outputs[?OutputKey==`FrontendUrl`].OutputValue' --output text)
+          FRONTEND_URL=$(aws cloudformation describe-stacks --stack-name $FRONTEND_STACK_NAME --region $REGION --query 'Stacks[0].Outputs[?OutputKey==`FrontendUrl`].OutputValue' --output text)
           echo "### Deploy succeeded" >> $GITHUB_STEP_SUMMARY
           echo "Frontend: [$FRONTEND_URL]($FRONTEND_URL)" >> $GITHUB_STEP_SUMMARY
           echo "Virtual Machine: ${{ needs.deploy-backend.outputs.IP_ADDRESS }}" >> $GITHUB_STEP_SUMMARY

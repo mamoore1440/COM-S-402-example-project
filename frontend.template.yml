@@ -77,9 +77,7 @@ Resources:
           S3OriginConfig: # Necessary for cloudfront to work with s3 even though OAI is not being used
             OriginAccessIdentity: ''
         ViewerCertificate:
-          AcmCertificateArn: !Ref ACMCertificate
-          MinimumProtocolVersion: TLSv1
-          SslSupportMethod: sni-only
+          CloudFrontDefaultCertificate: 'true'
 
 Outputs:
   S3BucketName:
