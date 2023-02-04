@@ -1,0 +1,108 @@
+name: Deploy
+
+on: 
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  deployments: write
+
+env:
+  REGION: us-east-1
+
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@master
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ secrets.IAM_ROLE_ARN }}
+          aws-region: ${{ env.REGION }}
+
+      - name: Deploy Backend
+        id: deploy-server
+        run: |
+          sam deploy --region $REGION --stack-name "backend" -t backend.template.yml
+
+          EC2_IP_ADDRESS=$(aws cloudformation describe-stacks --region $REGION --query 'Stacks[0].Outputs[?OutputKey==`IPAddress`].OutputValue' --output text)
+          KEY_PAIR_NAME=$(aws cloudformation describe-stacks --region $REGION --query 'Stacks[0].Outputs[?OutputKey==`SSHKeyPairName`].OutputValue' --output text)
+
+          echo "SERVER_IP=$EC2_IP_ADDRESS" >> $GITHUB_OUTPUT
+          echo "KEY_PAIR_NAME=$KEY_PAIR_NAME" >> $GITHUB_OUTPUT
+
+      - name: Start API 
+        run: |
+          # Grab the SSH key from AWS
+          aws ssm get-parameter --name $SSH_KEY_PAIR --region $REGION --with-decryption --query 'Parameter.Value' --output text > key.pem
+          chmod 600 key.pem
+          EC2_INSTANCE_ID=$(aws ec2 describe-instances --region $REGION --filters "Name=ip-address,Values=$EC2_IP_ADDRESS" --query "Reservations[*].Instances[*].[InstanceId]" --output text)
+          EC2_INSTANCE_STATUS=$(aws ec2 describe-instance-status --region $REGION --instance-id $EC2_INSTANCE_ID --query "InstanceStatuses[?InstanceId=='$EC2_INSTANCE_ID'].InstanceState.Name")
+          until [ "$EC2_INSTANCE_STATUS" == "running" ]; do
+            echo "Starting EC2 Instance..."
+            aws ec2 start-instances --instance-ids $EC2_INSTANCE_ID
+            sleep 30
+            EC2_INSTANCE_STATUS=$(aws ec2 describe-instance-status --region $REGION --instance-id $EC2_INSTANCE_ID --query "InstanceStatuses[?InstanceId=='$EC2_INSTANCE_ID'].InstanceState.Name" --output text)
+          done
+          echo "Copying backend code to VM"
+          rsync -e "ssh -i key.pem -o StrictHostKeyChecking=no" -r backend/ ubuntu@$EC2_IP_ADDRESS:backend
+
+          echo "Starting backend on VM"
+          ssh -i key.pem -o "StrictHostKeyChecking no" ubuntu@$EC2_IP_ADDRESS "
+          # Install docker if it does not already exist
+          if ! [ -x "$(command -v docker)" ]; then 
+            sudo apt-get update
+            sudo apt-get upgrade -y
+            sudo apt-get install docker.io -y
+            sudo chmod 666 /var/run/docker.sock
+          fi
+
+          # Stop & Clear old docker containers (Note this will cause some downtime)
+          docker stop $(docker ps -a -q)
+          docker rm $(docker ps -a -q)
+
+          # Build the latest version of the docker image and launch it
+          cd backend
+          docker build -t api .
+          docker run -d -p 3000:3000 --restart=unless-stopped api
+          "
+
+  deploy-frontend:
+    needs: deploy-backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@master
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ secrets.IAM_ROLE_ARN }}
+          aws-region: ${{ env.REGION }}
+
+      - name: Deploy frontend
+        run: |
+          sam deploy --region $REGION --stack-name "frontend" -t frontend.template.yml
+
+      - name: Setup node
+        uses: actions/setup-node@v3
+        with:
+          node-version-file: ./frontend/.nvmrc
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Build and push static frontend
+        run: |
+          npm run build
+
+          BUCKET=$(aws cloudformation describe-stacks --stack-name="frontend" --region $REGION --query 'Stacks[0].Outputs[?OutputKey==`S3BucketName`].OutputValue' --output text)
+
+          aws s3 sync build s3://$BUCKET
+
