@@ -1,6 +1,12 @@
 AWSTemplateFormatVersion: 2010-09-09
 Description: Resources for the frontend (a static website)
 
+Parameters:
+  CachePolicyId:
+    Type: String
+    Default: 658327ea-f89d-4fab-a63d-7e88639e58f6 # id for the caching optimized policy
+    # See more policies at https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-cache-policies.html#managed-cache-policies-list
+
 Resources:
   # An S3 bucket where we can put our HTML, JavaScript, CSS files
   S3Bucket:

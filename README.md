@@ -1,7 +1,8 @@
 # Example 402 Project
-This is an example COM S 402 (Senior Design) project. The project comprises of a static frontend built with React and a backend API made with Flask (Python).
+This is an example COM S 402 (Senior Design) project. The project comprises of a static frontend built with [React](https://reactjs.org/) and a backend API made with [Flask](https://flask.palletsprojects.com/en/2.2.x/) (Python).
 
-The purpose of this is for a lecture I am giving on Cloud (specifically AWS) to a COM S 402 class.
+#### Purpose
+I made this to show and walk through at a lecture I will be giving on Cloud (specifically [AWS](https://aws.amazon.com)).
 
 
 ### Considerations
