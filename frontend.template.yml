@@ -86,3 +86,7 @@ Outputs:
     Value: !Ref S3Bucket
     Description: The name of the stacks S3 bucket where the static site is hosted.
 
+  # This wouldn't be needed if we were using our own domain. For this example we are being given a domain so we need to know what that value is.
+  FrontendUrl:
+    Value: !Sub 'https://${CloudFrontDistribution.DomainName}'
+    Description: The URL of the frontend's cloudfront distribution.
