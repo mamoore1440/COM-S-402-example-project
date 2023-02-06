@@ -29,7 +29,10 @@ I would advocate against having a frontend and a backend stack for a project lik
 ## Connecting Repository to AWS
 If you still need to grant the repository access to deploy resources inside your AWS account, follow these steps.
 
-### 1. Create an IAM Role
+### 1. Configure OpenID to connect AWS and GitHub Actions
+Refer to GitHub's docs for [Configuring OpenID Connect in AWS](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services) for guidance.
+
+### 2. Create an IAM Role
 In your AWS Account, create a new IAM Role with the permissions you deem necessary. The role must include permissions to create/update/delete resources in the following services.
 
   - [Cloudformation](https://aws.amazon.com/cloudformation/)
@@ -40,14 +43,12 @@ In your AWS Account, create a new IAM Role with the permissions you deem necessa
 
 **Note:** It is best practice to follow the [least-Privilege Principle](https://g.co/kgs/Erp38S)
 
-### 2. Configure OpenID to connect AWS and GitHub Actions
-Refer to GitHub's docs for [Configuring OpenID Connect in AWS](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services) for guidance.
 
 ### 3. Add essential secrets to your GitHub repository.
 
 Add the following secrets via **Repository settings** > **Secrets** > **Actions**.
 
-  - `IAM_ROLE_ARN` containing your IAM Role ARN from step 1.
+  - `IAM_ROLE_ARN` containing your IAM Role ARN from step 2.
 
 
 ---
