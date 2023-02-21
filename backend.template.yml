@@ -14,7 +14,7 @@ Resources:
   SSHKey:
     Type: AWS::EC2::KeyPair
     Properties: 
-      KeyName: virtual-machine-ssh-key
+      KeyName: virtual-machine-ssh-key-yeet
 
 
   # The Virtual Machine (called an EC2 Instance) that we can use to run our API
