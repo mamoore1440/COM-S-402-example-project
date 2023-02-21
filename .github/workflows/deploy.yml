@@ -12,8 +12,8 @@ permissions:
 
 env:
   REGION: us-east-1
-  BACKEND_STACK_NAME: "backend"
-  FRONTEND_STACK_NAME: "frontend"
+  BACKEND_STACK_NAME: "backend-yeet"
+  FRONTEND_STACK_NAME: "frontend-yeet"
 
 jobs:
   deploy-backend:
